@@ -14,6 +14,7 @@ task tenants: :environment do |_t, _args|
       puts("id: #{tenant.id}")
       puts("\tname: #{tenant.name}")
       puts("\tsecrets: #{tenant.secrets}")
+      puts("\tmax_participants: #{tenant.max_participants}") if tenant.max_participants.present?
       puts("\tlrs_endpoint: #{tenant.lrs_endpoint}") if tenant.lrs_endpoint.present?
       puts("\tlrs_username: #{tenant.lrs_username}") if tenant.lrs_username.present?
       puts("\tlrs_password: #{tenant.lrs_password}") if tenant.lrs_password.present?
@@ -30,28 +31,30 @@ end
 
 namespace :tenants do
   desc 'Add a new Tenant'
-  task :add, [:name, :secrets] => :environment do |_t, args|
+  task :add, [:name, :secrets, :max_participants] => :environment do |_t, args|
     check_multitenancy
     name = args[:name]
     secrets = args[:secrets]
+    max_participants = args[:max_participants]
 
     unless name.present? && secrets.present?
       puts('Error: both name and secrets are required to create a Tenant')
       exit(1)
     end
 
-    tenant = Tenant.create!(name: name, secrets: secrets)
+    tenant = Tenant.create!(name: name, secrets: secrets, max_participants: max_participants)
 
     puts('OK')
     puts("New Tenant id: #{tenant.id}")
   end
 
   desc 'Update an existing Tenant'
-  task :update, [:id, :name, :secrets] => :environment do |_t, args|
+  task :update, [:id, :name, :secrets, :max_participants] => :environment do |_t, args|
     check_multitenancy
     id = args[:id]
     name = args[:name]
     secrets = args[:secrets]
+    max_participants = args[:max_participants]
 
     if id.blank? || !(name.present? || secrets.present?)
       puts('Error: id and either name or secrets are required to update a Tenant')
@@ -61,6 +64,7 @@ namespace :tenants do
     tenant = Tenant.find(id)
     tenant.name = name if name.present?
     tenant.secrets = secrets if secrets.present?
+    tenant.max_participants = max_participants if max_participants.present?
 
     tenant.save!
 

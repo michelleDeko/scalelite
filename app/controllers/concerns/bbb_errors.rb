@@ -63,4 +63,10 @@ module BBBErrors
       super('serverTagUnavailable', "There is no available server with the required tag=#{tag}.")
     end
   end
+
+  class MaxParticipantsReachedError < BBBError
+    def initialize
+      super('maxParticipantsReached', 'The maximum number of participants for this meeting has been reached.')
+    end
+  end
 end

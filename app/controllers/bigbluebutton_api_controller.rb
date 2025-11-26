@@ -172,6 +172,10 @@ class BigBlueButtonApiController < ApplicationController
       meeting = Meeting.find(params[:meetingID], @tenant&.id)
       server = meeting.server
       logger.debug("Found existing meeting #{params[:meetingID]} on BigBlueButton server #{server.id}.")
+      unless ParticipantCountService.new(tenant_id: @tenant.id).can_join?
+        logger.info("The meeting #{params[:meetingID]} has reached the maximum number of participants")
+        raise ParticipantLimitExceededError
+      end
     rescue ApplicationRedisRecord::RecordNotFound
       begin
         # Find available server and create meeting on it
@@ -314,6 +318,12 @@ class BigBlueButtonApiController < ApplicationController
       logger.info("The requested meeting #{params[:meetingID]} does not exist")
       raise MeetingNotFoundError
     end
+
+    unless ParticipantCountService.new(tenant_id: @tenant.id).can_join?(meeting.id)
+      logger.info("The meeting #{params[:meetingID]} has reached the maximum number of participants")
+      raise ParticipantLimitExceededError
+    end
+
     logger.debug("Incrementing server #{server.id} load by 1")
     server.increment_load(1)
 
