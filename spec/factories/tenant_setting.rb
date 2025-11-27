@@ -5,6 +5,7 @@ FactoryBot.define do
     sequence(:param) { |n| "param-#{n}" }
     value { 'value' }
     override { 'false' }
+    sl_param { 'false' }
     tenant_id {}
   end
 end

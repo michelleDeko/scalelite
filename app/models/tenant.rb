@@ -3,7 +3,7 @@
 class Tenant < ApplicationRedisRecord
   SECRETS_SEPARATOR = ':'
 
-  define_attribute_methods :id, :name, :secrets, :max_participants, :lrs_endpoint, :lrs_username, :lrs_password,
+  define_attribute_methods :id, :name, :secrets, :participants, :lrs_endpoint, :lrs_username, :lrs_password,
                            :kc_token_url, :kc_client_id, :kc_client_secret, :kc_username, :kc_password
 
   # Unique ID for this tenant
@@ -15,8 +15,8 @@ class Tenant < ApplicationRedisRecord
   # Shared secrets for making API requests for this tenant (: separated)
   application_redis_attr :secrets
 
-  # Maximum number of participants allowed for this tenant (nil = unlimited)
-  application_redis_attr :max_participants
+  # Number of participants for this tenant
+  application_redis_attr :participants
 
   # Custom LRS work
   application_redis_attr :lrs_endpoint
@@ -48,7 +48,7 @@ class Tenant < ApplicationRedisRecord
           pipeline.del(old_names_key) if !id_changed? && name_changed? # Delete the old name key if it's not a new record and the name was updated
           pipeline.hset(id_key, 'name', name) if name_changed?
           pipeline.hset(id_key, 'secrets', secrets) if secrets_changed?
-          pipeline.hset(id_key, 'max_participants', max_participants) if max_participants_changed?
+          pipeline.hset(id_key, 'participants', participants) if participants_changed?
           pipeline.hset(id_key, 'lrs_endpoint', lrs_endpoint) if lrs_endpoint_changed?
           pipeline.hset(id_key, 'lrs_username', lrs_username) if lrs_username_changed?
           pipeline.hset(id_key, 'lrs_password', lrs_password) if lrs_password_changed?

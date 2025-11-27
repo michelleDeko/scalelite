@@ -174,7 +174,7 @@ class BigBlueButtonApiController < ApplicationController
       logger.debug("Found existing meeting #{params[:meetingID]} on BigBlueButton server #{server.id}.")
       unless ParticipantCountService.new(tenant_id: @tenant.id).can_join?
         logger.info("The meeting #{params[:meetingID]} has reached the maximum number of participants")
-        raise ParticipantLimitExceededError
+        raise MaxParticipantsReachedError
       end
     rescue ApplicationRedisRecord::RecordNotFound
       begin
@@ -319,9 +319,9 @@ class BigBlueButtonApiController < ApplicationController
       raise MeetingNotFoundError
     end
 
-    unless ParticipantCountService.new(tenant_id: @tenant.id).can_join?(meeting.id)
+    unless ParticipantCountService.new(tenant_id: @tenant.id).can_join?
       logger.info("The meeting #{params[:meetingID]} has reached the maximum number of participants")
-      raise ParticipantLimitExceededError
+      raise MaxParticipantsReachedError
     end
 
     logger.debug("Incrementing server #{server.id} load by 1")
@@ -560,8 +560,24 @@ class BigBlueButtonApiController < ApplicationController
   # Filter out unneeded params when passing through to join and create calls
   # Has to be to_unsafe_hash since to_h only accepts permitted attributes
   def pass_through_params(excluded_params)
-    params.except(*(excluded_params + [:format, :controller, :action, :checksum]))
-          .to_unsafe_hash
+    filtered_params = params.except(*(excluded_params + [:format, :controller, :action, :checksum]))
+                            .to_unsafe_hash
+
+    # Filter out sl_params (Scalelite internal parameters that should not be passed to BBB)
+    filter_sl_params(filtered_params)
+  end
+
+  def filter_sl_params(params_hash)
+    return params_hash unless @tenant.present?
+
+    sl_params = get_sl_params
+    params_hash.except(*sl_params)
+  end
+
+  def get_sl_params
+    settings = TenantSetting.all(@tenant.id)
+    settings.select { |s| s.sl_param == 'true' || s.sl_param == true }
+            .map { |s| s.param.to_sym }
   end
 
   def set_tenant

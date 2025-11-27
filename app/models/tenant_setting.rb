@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class TenantSetting < ApplicationRedisRecord
-  define_attribute_methods :id, :param, :value, :override, :tenant_id
+  define_attribute_methods :id, :param, :value, :override, :tenant_id, :sl_param
 
   # Unique ID for this tenant
   application_redis_attr :id
@@ -17,6 +17,9 @@ class TenantSetting < ApplicationRedisRecord
 
   # The tenant that the settings belong to
   application_redis_attr :tenant_id
+
+  # If sl-param is true, the param is not redirected to BigBlueButton servers
+  application_redis_attr :sl_param
 
   def save!
     with_connection do |redis|
@@ -35,6 +38,7 @@ class TenantSetting < ApplicationRedisRecord
           pipeline.hset(key, 'value', value) if value_changed?
           pipeline.hset(key, 'override', override) if override_changed?
           pipeline.hset(key, 'tenant_id', tenant_id) if tenant_id_changed?
+          pipeline.hset(key, 'sl_param', sl_param) if sl_param_changed?
 
           pipeline.sadd?("tenant_settings:#{tenant_id}", id) if id_changed?
         end

@@ -38,6 +38,9 @@ namespace :poll do
         resp = get_post_req(encode_bbb_uri('getMeetings', server.url, server.secret))
         meetings = resp.xpath('/response/meetings/meeting')
 
+        # Track participants per tenant
+        tenant_participants = {}
+
         total_attendees = 0
         server_users = 0
         video_streams = 0
@@ -55,6 +58,18 @@ namespace :poll do
           streams = meeting.at_xpath('videoCount')
           video_streams += streams.present? ? streams.text.to_i : 0
 
+          # Count participants per tenant
+          if Rails.configuration.x.multitenancy_enabled
+            meeting_id = meeting.xpath('.//meetingID').text
+            db_meeting = Meeting.find(meeting_id, nil)
+            if db_meeting&.tenant_id
+              tenant_participants[db_meeting.tenant_id] ||= 0
+              tenant_participants[db_meeting.tenant_id] += actual_attendees
+            end
+          rescue ApplicationRedisRecord::RecordNotFound
+            # Meeting not in database, skip tenant tracking
+          end
+
           next if meeting.xpath('.//isBreakout').text.eql?('true')
 
           total_attendees += if created_time > x_minutes_ago
@@ -63,6 +78,19 @@ namespace :poll do
                                actual_attendees
                              end
         end
+
+        # Update tenant participant counts
+        tenant_participants.each do |tenant_id, count|
+          begin
+            tenant = Tenant.find(tenant_id)
+            tenant.participants = count
+            tenant.save!
+            Rails.logger.debug("Updated tenant id=#{tenant_id} with #{count} participants")
+          rescue StandardError => e
+            Rails.logger.warn("Error updating tenant id=#{tenant_id} participant count: #{e}")
+          end
+        end
+
         # Reset unhealthy counter so that only consecutive unhealthy calls are counted
         server.reset_unhealthy_counter
 
@@ -207,3 +235,5 @@ namespace :poll do
   desc 'Run all pollers once'
   multitask all: [:servers, :meetings, :versions]
 end
+
+```
