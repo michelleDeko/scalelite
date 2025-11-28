@@ -568,7 +568,7 @@ class BigBlueButtonApiController < ApplicationController
   end
 
   def filter_sl_params(params_hash)
-    return params_hash unless @tenant.present?
+    return params_hash if @tenant.blank?
 
     sl_params = get_sl_params
     params_hash.except(*sl_params)

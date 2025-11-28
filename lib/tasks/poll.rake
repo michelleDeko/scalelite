@@ -61,13 +61,15 @@ namespace :poll do
           # Count participants per tenant
           if Rails.configuration.x.multitenancy_enabled
             meeting_id = meeting.xpath('.//meetingID').text
-            db_meeting = Meeting.find(meeting_id, nil)
-            if db_meeting&.tenant_id
-              tenant_participants[db_meeting.tenant_id] ||= 0
-              tenant_participants[db_meeting.tenant_id] += actual_attendees
+            begin
+              db_meeting = Meeting.find(meeting_id, nil)
+              if db_meeting&.tenant_id
+                tenant_participants[db_meeting.tenant_id] ||= 0
+                tenant_participants[db_meeting.tenant_id] += actual_attendees
+              end
+            rescue ApplicationRedisRecord::RecordNotFound
+              # Meeting not in database, skip tenant tracking
             end
-          rescue ApplicationRedisRecord::RecordNotFound
-            # Meeting not in database, skip tenant tracking
           end
 
           next if meeting.xpath('.//isBreakout').text.eql?('true')
@@ -85,7 +87,7 @@ namespace :poll do
             tenant = Tenant.find(tenant_id)
             tenant.participants = count
             tenant.save!
-            Rails.logger.debug("Updated tenant id=#{tenant_id} with #{count} participants")
+            Rails.logger.debug { "Updated tenant id=#{tenant_id} with #{count} participants" }
           rescue StandardError => e
             Rails.logger.warn("Error updating tenant id=#{tenant_id} participant count: #{e}")
           end
@@ -235,5 +237,3 @@ namespace :poll do
   desc 'Run all pollers once'
   multitask all: [:servers, :meetings, :versions]
 end
-
-```

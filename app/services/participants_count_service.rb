@@ -7,7 +7,7 @@ class ParticipantCountService
 
   def can_join?
     tenant = Tenant.find(@tenant_id)
-    limit = get_limit
+    limit = limit_setting
 
     # No limit set, allow joining
     return true if limit.nil?
@@ -18,9 +18,9 @@ class ParticipantCountService
 
   private
 
-  def get_limit
+  def limit_setting
     settings = TenantSetting.all(@tenant_id)
-    limit_setting = settings.find { |s| s.param == 'limitParticipants' }
-    limit_setting&.value
+    limit = settings.find { |s| s.param == 'limitParticipants' }
+    limit&.value
   end
 end
