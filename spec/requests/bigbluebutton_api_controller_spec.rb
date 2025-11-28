@@ -2575,4 +2575,179 @@ RSpec.describe BigBlueButtonApiController, :redis do
       end
     end
   end
+
+  describe 'ParticipantCountService with tenant limits' do
+    let!(:tenant) { create(:tenant, participants: 5, name: 'test-1') }
+    let!(:meeting_id) { 'test-meeting' }
+
+    before do
+      Rails.configuration.x.multitenancy_enabled = true
+      host! "#{tenant.name}.api.rna1.blindside-dev.com"
+    end
+
+    context 'when multitenancy is disabled' do
+      before do
+        Rails.configuration.x.multitenancy_enabled = false
+      end
+
+      it 'allows joining without participant limit checks' do
+        stub_request(:get, encode_bbb_uri('getMeetingInfo', server.url, server.secret, meetingID: meeting_id))
+          .to_return(body: "<response><returncode>SUCCESS</returncode><participantCount>10</participantCount><moderatorCount>2</moderatorCount></response>")
+
+        meeting = create(:meeting, id: meeting_id, server: server)
+        params = encode_bbb_params('join', "meetingID=#{meeting_id}&fullName=TestUser&password=test-password")
+
+        get bigbluebutton_api_join_url, params: params
+
+        expect(response).to redirect_to(/join/)
+      end
+    end
+
+    context 'when no tenant setting for limitParticipants exists' do
+      it 'allows joining without any limit' do
+        stub_request(:get, encode_bbb_uri('getMeetingInfo', server.url, server.secret, meetingID: meeting_id))
+          .to_return(body: "<response><returncode>SUCCESS</returncode><participantCount>50</participantCount><moderatorCount>10</moderatorCount></response>")
+
+        meeting = create(:meeting, id: meeting_id, server: server, tenant: tenant)
+        params = encode_bbb_params('join', "meetingID=#{meeting_id}&fullName=TestUser&password=test-password")
+
+        get bigbluebutton_api_join_url, params: params
+
+        expect(response).to redirect_to(/join/)
+      end
+    end
+
+    context 'when limitParticipants tenant setting exists' do
+      let!(:limit_setting) { create(:tenant_setting, tenant_id: tenant.id, param: 'limitParticipants', value: '10', sl_param: 'true') }
+
+      context 'when participant count is below limit' do
+        it 'allows joining' do
+          tenant.participants = 5
+          tenant.save!
+          stub_request(:get, encode_bbb_uri('getMeetingInfo', server.url, server.secret, meetingID: meeting_id))
+            .to_return(body: "<response><returncode>SUCCESS</returncode><participantCount>5</participantCount><moderatorCount>0</moderatorCount></response>")
+
+          meeting = create(:meeting, id: meeting_id, server: server, tenant: tenant)
+          params = encode_bbb_params('join', "meetingID=#{meeting_id}&fullName=TestUser&password=test-password")
+
+          get bigbluebutton_api_join_url, params: params
+
+          expect(response).to redirect_to(/join/)
+        end
+      end
+
+      context 'when participant count equals limit' do
+        it 'allows joining' do
+          tenant.participants = 10
+          tenant.save!
+          stub_request(:get, encode_bbb_uri('getMeetingInfo', server.url, server.secret, meetingID: meeting_id))
+            .to_return(body: "<response><returncode>SUCCESS</returncode><participantCount>10</participantCount><moderatorCount>0</moderatorCount></response>")
+
+          meeting = create(:meeting, id: meeting_id, server: server, tenant: tenant)
+          params = encode_bbb_params('join', "meetingID=#{meeting_id}&fullName=TestUser&password=test-password")
+
+          get bigbluebutton_api_join_url, params: params
+
+          expect(response).to redirect_to(/join/)
+        end
+      end
+
+      context 'when participant count exceeds limit' do
+        it 'blocks joining with maxParticipantsReached error' do
+          tenant.participants = 11
+          tenant.save!
+          stub_request(:get, encode_bbb_uri('getMeetingInfo', server.url, server.secret, meetingID: meeting_id))
+            .to_return(body: "<response><returncode>SUCCESS</returncode><participantCount>11</participantCount><moderatorCount>0</moderatorCount></response>")
+
+          meeting = create(:meeting, id: meeting_id, server: server, tenant: tenant)
+          params = encode_bbb_params('join', "meetingID=#{meeting_id}&fullName=TestUser&password=test-password")
+
+          get bigbluebutton_api_join_url, params: params
+
+          response_xml = Nokogiri::XML(response.body)
+          expect(response_xml.at_xpath('/response/returncode').text).to eq('FAILED')
+          expect(response_xml.at_xpath('/response/messageKey').text).to eq('maxParticipantsReached')
+          expect(response_xml.at_xpath('/response/message').text).to include('maximum number of participants')
+        end
+      end
+    end
+  end
+
+  describe 'sl_param filtering in create/join' do
+    let!(:tenant) { create(:tenant, name: 'test-1') }
+    let!(:meeting_id) { 'test-meeting' }
+
+    before do
+      Rails.configuration.x.multitenancy_enabled = true
+      host! "#{tenant.name}.api.rna1.blindside-dev.com"
+    end
+
+    context 'when sl_param settings exist' do
+      let!(:sl_param_setting) do
+        create(:tenant_setting, tenant_id: tenant.id, param: 'customParam', value: 'customValue', sl_param: 'true')
+      end
+      let!(:regular_setting) do
+        create(:tenant_setting, tenant_id: tenant.id, param: 'regularParam', value: 'regularValue', sl_param: 'false')
+      end
+
+      it 'filters out sl_param parameters before passing to BBB in create' do
+        stub_request(:get, %r{\A#{Regexp.escape(server.url.chomp('/'))}/+create})
+          .to_return(body: "<response><returncode>SUCCESS</returncode><meetingID>#{meeting_id}</meetingID><moderatorPW>pwd</moderatorPW></response>")
+
+        params = encode_bbb_params('create', "meetingID=#{meeting_id}&moderatorPW=test&customParam=should_be_filtered&regularParam=should_not_be_filtered")
+
+        post bigbluebutton_api_create_url, params: params
+
+        # Verify the request to BBB does not include customParam
+        expect(WebMock).to have_requested(:get, %r{\A#{Regexp.escape(server.url.chomp('/'))}/+create}).with { |request|
+          uri_str = request.uri.to_s
+          # customParam should not be in the URI
+          !uri_str.include?('customParam') && uri_str.include?('regularParam')
+        }
+      end
+
+      it 'includes regular params without sl_param flag in create' do
+        stub_request(:get, %r{\A#{Regexp.escape(server.url.chomp('/'))}/+create})
+          .to_return(body: "<response><returncode>SUCCESS</returncode><meetingID>#{meeting_id}</meetingID><moderatorPW>pwd</moderatorPW></response>")
+
+        params = encode_bbb_params('create', "meetingID=#{meeting_id}&moderatorPW=test&regularParam=value")
+
+        post bigbluebutton_api_create_url, params: params
+
+        expect(WebMock).to have_requested(:get, %r{\A#{Regexp.escape(server.url.chomp('/'))}/+create}).with { |request|
+          request.uri.to_s.include?('regularParam')
+        }
+      end
+
+      it 'filters out sl_param parameters before passing to BBB in join' do
+        stub_request(:get, encode_bbb_uri('getMeetingInfo', server.url, server.secret, meetingID: meeting_id))
+          .to_return(body: "<response><returncode>SUCCESS</returncode><participantCount>0</participantCount></response>")
+
+        meeting = create(:meeting, id: meeting_id, server: server, tenant: tenant)
+        params = encode_bbb_params('join', "meetingID=#{meeting_id}&fullName=TestUser&password=test&customParam=should_be_filtered&regularParam=value")
+
+        get bigbluebutton_api_join_url, params: params
+
+        # Verify redirect URL does not include customParam
+        expect(response).to redirect_to(/join/) do |uri|
+          !uri.include?('customParam') && uri.include?('regularParam')
+        end
+      end
+    end
+
+    context 'when no sl_param settings exist' do
+      it 'passes all parameters through to BBB' do
+        stub_request(:get, %r{\A#{Regexp.escape(server.url.chomp('/'))}/+create})
+          .to_return(body: "<response><returncode>SUCCESS</returncode><meetingID>#{meeting_id}</meetingID><moderatorPW>pwd</moderatorPW></response>")
+
+        params = encode_bbb_params('create', "meetingID=#{meeting_id}&moderatorPW=test&param1=value1&param2=value2")
+
+        post bigbluebutton_api_create_url, params: params
+
+        expect(WebMock).to have_requested(:get, %r{\A#{Regexp.escape(server.url.chomp('/'))}/+create}).with { |request|
+          request.uri.to_s.include?('param1') && request.uri.to_s.include?('param2')
+        }
+      end
+    end
+  end
 end

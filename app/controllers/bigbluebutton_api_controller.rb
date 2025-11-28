@@ -577,9 +577,9 @@ class BigBlueButtonApiController < ApplicationController
   end
 
   def get_sl_params
-    settings = TenantSetting.all(@tenant.id)
-    settings.select { |s| s.sl_param == 'true' || s.sl_param == true }
-            .map { |s| s.param.to_sym }
+      settings = TenantSetting.all(@tenant.id)
+      settings.select { |s| s.sl_param == 'true' || s.sl_param == true }
+        .map { |s| s.param.to_s }
   end
 
   def set_tenant

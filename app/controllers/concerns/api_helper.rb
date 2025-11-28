@@ -234,6 +234,16 @@ module ApiHelper
     else
       [{}, {}]
     end
+    # Remove any tenant settings that are marked as sl_param so they are not forwarded to BBB
+    if @tenant.present?
+      sl_params = TenantSetting.all(@tenant.id)
+                    .select { |s| s.sl_param == 'true' || s.sl_param == true }
+                    .map { |s| s.param.to_sym }
+      sl_params.each do |k|
+        default.delete(k)
+        override.delete(k)
+      end
+    end
     # Server tag is handled separately in create call
     default.delete(:'meta_server-tag')
     override.delete(:'meta_server-tag')
