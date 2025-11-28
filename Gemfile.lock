@@ -258,6 +258,9 @@ GEM
     regexp_parser (2.10.0)
     reline (0.6.0)
       io-console (~> 0.5)
+    resolv (0.6.3)
+    resolv-replace (0.1.1)
+      resolv
     rexml (3.4.2)
     rspec-core (3.13.3)
       rspec-support (~> 3.13.0)
@@ -371,6 +374,7 @@ DEPENDENCIES
   rails-controller-testing
   redis (~> 4.8.0)
   redis-namespace (~> 1.11.0)
+  resolv-replace
   rspec-rails (~> 7.1)
   rubocop (~> 1.61.0)
   rubocop-performance

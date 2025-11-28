@@ -6,6 +6,9 @@ class ParticipantCountService
   end
 
   def can_join?
+    # If no tenant, allow joining (no limit)
+    return true if @tenant_id.nil?
+
     tenant = Tenant.find(@tenant_id)
     limit = limit_setting
 

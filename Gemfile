@@ -34,6 +34,7 @@ gem 'tabulo', '~> 2.8.1'
 
 gem 'jwt', '~> 2.7.0'
 
+gem 'resolv-replace'
 gem 'aws-sdk-cloudfront', '~> 1'
 gem 'aws-sdk-s3', '~> 1'
 

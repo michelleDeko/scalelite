@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../services/participants_count_service'
+
 class BigBlueButtonApiController < ApplicationController
   include ApiHelper
 
@@ -172,7 +174,7 @@ class BigBlueButtonApiController < ApplicationController
       meeting = Meeting.find(params[:meetingID], @tenant&.id)
       server = meeting.server
       logger.debug("Found existing meeting #{params[:meetingID]} on BigBlueButton server #{server.id}.")
-      unless ParticipantCountService.new(tenant_id: @tenant.id).can_join?
+      unless ParticipantCountService.new(tenant_id: @tenant&.id).can_join?
         logger.info("The meeting #{params[:meetingID]} has reached the maximum number of participants")
         raise MaxParticipantsReachedError
       end
@@ -319,7 +321,7 @@ class BigBlueButtonApiController < ApplicationController
       raise MeetingNotFoundError
     end
 
-    unless ParticipantCountService.new(tenant_id: @tenant.id).can_join?
+    unless ParticipantCountService.new(tenant_id: @tenant&.id).can_join?
       logger.info("The meeting #{params[:meetingID]} has reached the maximum number of participants")
       raise MaxParticipantsReachedError
     end
